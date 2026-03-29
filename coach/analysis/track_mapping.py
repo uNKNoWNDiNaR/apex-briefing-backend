@@ -274,20 +274,31 @@ def export_track_map_sidecar(target_session: str, reference_session: str, config
 
     published_paths = {'backend_output_path': str(output_path)}
 
-    handoff_root = Path(config.get('mapping', {}).get('handoff_root', '/Volumes/SanDisk/RPE/lovable_handoff'))
-    app_public_root = Path(config.get('mapping', {}).get('app_public_root', '/Volumes/SanDisk/RPE/apex-briefing/public/data'))
+    mapping_cfg = config.get('mapping', {})
+    handoff_root_value = mapping_cfg.get('handoff_root')
+    app_public_root_value = mapping_cfg.get('app_public_root')
 
-    handoff_path = handoff_root / comparison_name / 'track_map_segments.json'
-    handoff_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(output_path, handoff_path)
-    _write_shared_guide(handoff_root / 'shared' / 'TRACK_MAP_UI_GUIDE.md')
-    published_paths['lovable_handoff_path'] = str(handoff_path)
+    if handoff_root_value:
+        try:
+            handoff_root = Path(handoff_root_value)
+            handoff_path = handoff_root / comparison_name / 'track_map_segments.json'
+            handoff_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(output_path, handoff_path)
+            _write_shared_guide(handoff_root / 'shared' / 'TRACK_MAP_UI_GUIDE.md')
+            published_paths['lovable_handoff_path'] = str(handoff_path)
+        except Exception:
+            published_paths['lovable_handoff_path'] = None
 
-    app_path = app_public_root / comparison_name / 'track_map_segments.json'
-    app_path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(output_path, app_path)
-    _write_shared_guide(app_public_root / 'shared' / 'TRACK_MAP_UI_GUIDE.md')
-    published_paths['apex_briefing_path'] = str(app_path)
+    if app_public_root_value:
+        try:
+            app_public_root = Path(app_public_root_value)
+            app_path = app_public_root / comparison_name / 'track_map_segments.json'
+            app_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(output_path, app_path)
+            _write_shared_guide(app_public_root / 'shared' / 'TRACK_MAP_UI_GUIDE.md')
+            published_paths['apex_briefing_path'] = str(app_path)
+        except Exception:
+            published_paths['apex_briefing_path'] = None
 
     return {
         'comparison_name': comparison_name,
