@@ -9,7 +9,7 @@ services:
     disk:
       name: coach-data
       mountPath: /data
-      sizeGB: 50
+      sizeGB: 5
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.10
