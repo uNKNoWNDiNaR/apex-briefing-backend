@@ -116,10 +116,18 @@ stats:
   duplicate_title_soft_cap: 2
 
 ai_debrief:
-  allow_remote_generation: false
+  allow_remote_generation: true
   model: gpt-4.1-mini
   temperature: 0.1
   max_cards_in_prompt: 6
+
+ai_selected_detail:
+  allow_remote_generation: true
+  model: gpt-4.1-mini
+  temperature: 0.1
+  max_cards_in_prompt: 8
+  max_corners_in_prompt: 8
+  max_replay_items_in_prompt: 8
 
 user_flow:
   supported_upload_formats:

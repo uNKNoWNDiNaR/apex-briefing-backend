@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from .analysis.ai_session_debrief import generate_ai_session_debrief
+from .analysis.ai_selected_detail import generate_ai_selected_detail_sidecar
 from .config import comparison_output_dir, load_config
 from .app.job_runner import process_job
 from .pipeline.pipeline_runner import run_comparison_pipeline
@@ -57,6 +58,21 @@ def cmd_ai_debrief(args: argparse.Namespace) -> None:
         'strength_count': len(debrief.get('top_strengths', [])),
         'weakness_count': len(debrief.get('top_weaknesses', [])),
         'focus_count': len(debrief.get('next_session_focus', [])),
+    }, indent=2))
+
+
+def cmd_ai_detail(args: argparse.Namespace) -> None:
+    config = load_config(args.config)
+    output_dir = comparison_output_dir(config, args.target, args.reference)
+    detail, output_path = generate_ai_selected_detail_sidecar(output_dir, config)
+    print(json.dumps({
+        'output_path': str(output_path),
+        'target_session': detail.get('target_session'),
+        'reference_session': detail.get('reference_session'),
+        'generation_mode': detail.get('generation_mode'),
+        'card_count': len(detail.get('cards', [])),
+        'corner_count': len(detail.get('corners', [])),
+        'replay_item_count': len(detail.get('replay_items', [])),
     }, indent=2))
 
 
@@ -124,6 +140,11 @@ def build_parser() -> argparse.ArgumentParser:
     ai_debrief.add_argument('--target', default='good_lap', choices=['good_lap', 'fast_laps', 'wheel_to_wheel'])
     ai_debrief.add_argument('--reference', default='fast_laps', choices=['good_lap', 'fast_laps', 'wheel_to_wheel'])
     ai_debrief.set_defaults(func=cmd_ai_debrief)
+
+    ai_detail = sub.add_parser('ai-detail', help='Generate bounded selected-detail AI explanations from existing comparison outputs')
+    ai_detail.add_argument('--target', default='good_lap', choices=['good_lap', 'fast_laps', 'wheel_to_wheel'])
+    ai_detail.add_argument('--reference', default='fast_laps', choices=['good_lap', 'fast_laps', 'wheel_to_wheel'])
+    ai_detail.set_defaults(func=cmd_ai_detail)
 
     upload = sub.add_parser('upload-session', help='Validate and register a user upload, optionally processing it immediately')
     upload.add_argument('--user-id', required=True)

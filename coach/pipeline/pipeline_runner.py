@@ -7,6 +7,7 @@ from typing import Any
 import pandas as pd
 
 from ..analysis.ai_session_debrief import generate_ai_session_debrief
+from ..analysis.ai_selected_detail import generate_ai_selected_detail_sidecar
 from ..analysis.compare_runs import build_comparison_summary, build_overlay, compare_segment_features
 from .compute_track_progress import annotate_track_progress, load_track_geometry, save_track_products
 from ..config import comparison_output_dir, get_boundary_path, get_session_path, session_output_dir
@@ -151,6 +152,7 @@ def run_comparison_pipeline(target_name: str, reference_name: str, config: dict[
     track_map_path = output_dir / 'track_map_segments.json'
     track_map_path.write_text(__import__('json').dumps(track_map, indent=2))
     ai_debrief, ai_debrief_path = generate_ai_session_debrief(output_dir, config)
+    ai_detail, ai_detail_path = generate_ai_selected_detail_sidecar(output_dir, config)
     return {
         'reference': prepared['reference'],
         'target': prepared['target'],
@@ -163,6 +165,7 @@ def run_comparison_pipeline(target_name: str, reference_name: str, config: dict[
         'racecraft_cards': len(racecraft_cards) if racecraft_cards else 0,
         'track_map_path': str(track_map_path),
         'ai_debrief_path': str(ai_debrief_path),
+        'ai_selected_detail_path': str(ai_detail_path),
         'output_dir': str(output_dir),
         'analysis_mode': analysis_mode,
     }

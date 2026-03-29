@@ -52,3 +52,13 @@ Set these environment variables in Render:
 
 Use `.env.example` as the source of truth for variable names.
 Use `render.yaml` as the primary deployment config.
+
+For grounded AI generation also set:
+- `OPENAI_API_KEY`
+- optional: `COACH_AI_DEBRIEF_ENABLED`, `COACH_AI_DETAIL_ENABLED`, `COACH_AI_MODEL`, `COACH_AI_TEMPERATURE`
+
+Main bounded AI commands:
+```bash
+.venv/bin/python -m coach.cli ai-debrief --target good_lap --reference fast_laps
+.venv/bin/python -m coach.cli ai-detail --target good_lap --reference fast_laps
+```

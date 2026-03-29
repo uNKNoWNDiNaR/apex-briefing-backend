@@ -1,14 +1,10 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
 
-try:
-    from openai import OpenAI  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
-    OpenAI = None
+from .grounded_llm import call_json_completion, generation_enabled
 
 
 REQUIRED_INPUTS = [
@@ -19,6 +15,9 @@ REQUIRED_INPUTS = [
     'coach_evidence.json',
     'run_summary.json',
 ]
+
+
+ALLOWED_REF_PREFIXES = ('card:', 'plan:', 'trait:', 'summary:phase:')
 
 
 def _read_json(path: Path) -> Any:
@@ -59,10 +58,6 @@ def _top_focus(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _summary(payload: dict[str, Any]) -> dict[str, Any]:
     return payload['inputs']['run_summary.json']
-
-
-def _takeaways(payload: dict[str, Any]) -> dict[str, Any]:
-    return payload['inputs']['session_takeaways.json']
 
 
 def _segment_name(card: dict[str, Any]) -> str:
@@ -189,7 +184,6 @@ def _build_next_focus(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _explain_card(card: dict[str, Any], evidence: dict[str, Any]) -> str:
-    deltas = evidence.get('deltas', {})
     segment = _segment_name(card)
     title = str(card.get('title', 'Issue'))
     if title == 'Brake later':
@@ -257,9 +251,7 @@ def _build_short_summary(payload: dict[str, Any]) -> str:
     dominant_share = None
     if phase_norm:
         dominant_phase, dominant_share = max(phase_norm.items(), key=lambda item: item[1])
-    text = (
-        f"You are {_round(summary.get('lap_time_delta_s'))} s off the {summary.get('reference_session')} reference. "
-    )
+    text = f"You are {_round(summary.get('lap_time_delta_s'))} s off the {summary.get('reference_session')} reference. "
     if dominant_phase is not None and dominant_share is not None:
         text += f"Most of the gap sits in {dominant_phase} ({_round(float(dominant_share) * 100.0, 1)}%). "
     if top_trait:
@@ -268,7 +260,7 @@ def _build_short_summary(payload: dict[str, Any]) -> str:
             text += f" in {', '.join(top_trait.get('affected_segments', [])[:2])}"
         text += '. '
     if top_card:
-        text += f"The clearest coaching opportunity is {_segment_name(top_card)} {_phase_label(str(top_card.get('phase')))}: {top_card.get('title').lower()}."
+        text += f"The clearest coaching opportunity is {_segment_name(top_card)} {_phase_label(str(top_card.get('phase')))}: {str(top_card.get('title', '')).lower()}."
     return text.strip()
 
 
@@ -374,18 +366,20 @@ def _fallback_debrief(payload: dict[str, Any], config: dict[str, Any]) -> dict[s
 
 
 def build_bounded_prompt(payload: dict[str, Any], config: dict[str, Any]) -> tuple[str, str]:
+    settings = config.get('ai_debrief', {})
+    limit = int(settings.get('max_cards_in_prompt', 6))
     compact = {
         'driver_profile': payload['inputs']['driver_profile.json'],
         'next_session_plan': payload['inputs']['next_session_plan.json'],
         'session_takeaways': payload['inputs']['session_takeaways.json'],
-        'coach_cards': _top_cards(payload, limit=int(config.get('ai_debrief', {}).get('max_cards_in_prompt', 6))),
-        'coach_evidence': list(_evidence_map(payload).values())[: int(config.get('ai_debrief', {}).get('max_cards_in_prompt', 6))],
+        'coach_cards': _top_cards(payload, limit=limit),
+        'coach_evidence': list(_evidence_map(payload).values())[:limit],
         'run_summary': payload['inputs']['run_summary.json'],
     }
     system = (
         'You are writing a grounded race-engineer debrief. Use only the supplied JSON facts. '
         'Do not invent telemetry, numbers, or coaching claims. Keep the output concise and human-readable. '
-        'Return JSON only with the exact requested keys.'
+        'Every evidence_refs entry must use one of the allowed reference formats exactly. Return JSON only.'
     )
     user = json.dumps({
         'task': 'Generate ai_session_debrief.json from the provided backend outputs.',
@@ -408,45 +402,74 @@ def build_bounded_prompt(payload: dict[str, Any], config: dict[str, Any]) -> tup
     return system, user
 
 
+def _clean_refs(refs: Any) -> list[str]:
+    cleaned: list[str] = []
+    for ref in refs if isinstance(refs, list) else []:
+        ref = str(ref).strip()
+        if ref.startswith(ALLOWED_REF_PREFIXES):
+            cleaned.append(ref)
+    return list(dict.fromkeys(cleaned))
+
+
+def _normalize_items(items: Any, allowed_fields: list[str]) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        row: dict[str, Any] = {}
+        for field in allowed_fields:
+            if field == 'evidence_refs':
+                row[field] = _clean_refs(item.get(field, []))
+            else:
+                row[field] = str(item.get(field, '') or '').strip()
+        normalized.append(row)
+    return normalized
+
+
+def _normalize_debrief(parsed: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any] | None:
+    summary = _summary(payload)
+    debrief = {
+        'debrief_version': '1.0',
+        'target_session': summary.get('target_session'),
+        'reference_session': summary.get('reference_session'),
+        'generation_mode': 'llm_grounded',
+        'short_summary': str(parsed.get('short_summary', '') or '').strip(),
+        'top_strengths': _normalize_items(parsed.get('top_strengths', []), ['title', 'detail', 'evidence_refs'])[:3],
+        'top_weaknesses': _normalize_items(parsed.get('top_weaknesses', []), ['title', 'detail', 'evidence_refs'])[:3],
+        'next_session_focus': _normalize_items(parsed.get('next_session_focus', []), ['title', 'why_it_matters', 'what_to_do_next_session', 'evidence_refs'])[:3],
+        'plain_english_explanations': _normalize_items(parsed.get('plain_english_explanations', []), ['issue', 'segment_name', 'explanation', 'evidence_refs'])[:3],
+        'motivational_close': str(parsed.get('motivational_close', '') or '').strip(),
+    }
+    if not debrief['short_summary']:
+        return None
+    if not debrief['top_weaknesses']:
+        return None
+    debrief['evidence_refs'] = _build_evidence_refs(payload, debrief)
+    return debrief
+
+
 def _try_remote_generation(payload: dict[str, Any], config: dict[str, Any]) -> dict[str, Any] | None:
     settings = config.get('ai_debrief', {})
-    if not settings.get('allow_remote_generation', False):
-        return None
-    if OpenAI is None:
-        return None
-    api_key = os.getenv('OPENAI_API_KEY')
-    if not api_key:
+    if not generation_enabled(settings, 'COACH_AI_DEBRIEF_ENABLED'):
         return None
     system, user = build_bounded_prompt(payload, config)
-    client = OpenAI(api_key=api_key)
-    try:
-        response = client.responses.create(
-            model=settings.get('model', 'gpt-4.1-mini'),
-            temperature=float(settings.get('temperature', 0.1)),
-            input=[
-                {'role': 'system', 'content': system},
-                {'role': 'user', 'content': user},
-            ],
-        )
-        text = response.output_text
-        parsed = json.loads(text)
-        summary = _summary(payload)
-        debrief = {
-            'debrief_version': '1.0',
-            'target_session': summary.get('target_session'),
-            'reference_session': summary.get('reference_session'),
-            'generation_mode': 'llm_grounded',
-            'short_summary': parsed.get('short_summary', ''),
-            'top_strengths': parsed.get('top_strengths', []),
-            'top_weaknesses': parsed.get('top_weaknesses', []),
-            'next_session_focus': parsed.get('next_session_focus', []),
-            'plain_english_explanations': parsed.get('plain_english_explanations', []),
-            'motivational_close': parsed.get('motivational_close', ''),
-        }
-        debrief['evidence_refs'] = _build_evidence_refs(payload, debrief)
-        return debrief
-    except Exception:
+    parsed = call_json_completion(
+        system=system,
+        user=user,
+        settings=settings,
+        default_model='gpt-4.1-mini',
+        response_schema_hint={
+            'short_summary': 'string',
+            'top_strengths': 'array',
+            'top_weaknesses': 'array',
+            'next_session_focus': 'array',
+            'plain_english_explanations': 'array',
+            'motivational_close': 'string',
+        },
+    )
+    if not parsed:
         return None
+    return _normalize_debrief(parsed, payload)
 
 
 def generate_ai_session_debrief(comparison_dir: str | Path, config: dict[str, Any]) -> tuple[dict[str, Any], Path]:

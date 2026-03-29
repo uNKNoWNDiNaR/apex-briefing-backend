@@ -39,11 +39,24 @@ def _apply_env_overrides(config: dict[str, Any]) -> None:
         ('mapping', 'handoff_root'): os.getenv('COACH_HANDOFF_ROOT'),
         ('mapping', 'app_public_root'): os.getenv('COACH_APP_PUBLIC_ROOT'),
         ('service', 'cors_allowed_origins'): os.getenv('COACH_CORS_ALLOWED_ORIGINS'),
+        ('ai_debrief', 'allow_remote_generation'): os.getenv('COACH_AI_DEBRIEF_ENABLED'),
+        ('ai_debrief', 'model'): os.getenv('COACH_AI_MODEL'),
+        ('ai_debrief', 'temperature'): os.getenv('COACH_AI_TEMPERATURE'),
+        ('ai_selected_detail', 'allow_remote_generation'): os.getenv('COACH_AI_DETAIL_ENABLED'),
+        ('ai_selected_detail', 'model'): os.getenv('COACH_AI_DETAIL_MODEL') or os.getenv('COACH_AI_MODEL'),
+        ('ai_selected_detail', 'temperature'): os.getenv('COACH_AI_DETAIL_TEMPERATURE') or os.getenv('COACH_AI_TEMPERATURE'),
     }
     for (section, key), value in env_map.items():
         if value:
             if section == 'service' and key == 'cors_allowed_origins':
                 config.setdefault(section, {})[key] = [item.strip() for item in value.split(',') if item.strip()]
+            elif key == 'allow_remote_generation':
+                config.setdefault(section, {})[key] = str(value).strip().lower() in {'1', 'true', 'yes', 'on'}
+            elif key == 'temperature':
+                try:
+                    config.setdefault(section, {})[key] = float(value)
+                except Exception:
+                    config.setdefault(section, {})[key] = value
             else:
                 config.setdefault(section, {})[key] = value
 
