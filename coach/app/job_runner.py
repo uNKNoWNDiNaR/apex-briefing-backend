@@ -62,6 +62,7 @@ def process_job(job_id: str, config_path: str | None = None) -> dict[str, Any]:
             'analysis_mode': job['analysis_mode'],
             'status': 'success',
             'comparison_dir': str(comparison_dir),
+            'user_profile': session.get('user_profile'),
             'result_files': files,
             'retrieval': {
                 'session_path': f"/api/users/{job['user_id']}/sessions/{job['session_id']}",

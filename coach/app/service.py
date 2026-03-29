@@ -14,7 +14,7 @@ from urllib.parse import unquote, urlparse
 
 from ..config import load_config
 from .job_runner import process_job
-from .session_store import create_job, create_user_session, get_job, get_result_metadata, get_session_metadata, list_user_sessions
+from .session_store import create_job, create_user_session, get_job, get_result_metadata, get_session_metadata, get_user_profile, list_user_sessions, update_user_profile
 from .uploads import UploadValidationError, validate_upload
 
 
@@ -163,6 +163,18 @@ class CoachingServiceHandler(BaseHTTPRequestHandler):
         self._write_common_headers('application/json', 0)
         self.end_headers()
 
+    def _extract_profile_fields(self, source: Any) -> dict[str, str]:
+        profile: dict[str, str] = {}
+        for field in ('driver_name', 'driver_type', 'experience_level', 'primary_goal'):
+            getter = getattr(source, 'getvalue', None)
+            value = getter(field) if getter else source.get(field)
+            if value is None:
+                continue
+            value = str(value).strip()
+            if value:
+                profile[field] = value
+        return profile
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path.rstrip('/')
@@ -176,6 +188,14 @@ class CoachingServiceHandler(BaseHTTPRequestHandler):
             job_id = path.split('/')[-1]
             try:
                 self._serve_cached_or_json(f'json:{path}', lambda: get_job(self._config(), job_id))
+            except Exception as exc:
+                self._error(404, str(exc))
+            return
+        if path.startswith('/api/users/') and path.endswith('/profile'):
+            parts = path.split('/')
+            user_id = parts[3]
+            try:
+                self._serve_cached_or_json(f'json:{path}', lambda: get_user_profile(self._config(), user_id))
             except Exception as exc:
                 self._error(404, str(exc))
             return
@@ -242,7 +262,25 @@ class CoachingServiceHandler(BaseHTTPRequestHandler):
         if path == '/api/uploads':
             self._handle_upload()
             return
+        if path.startswith('/api/users/') and path.endswith('/profile'):
+            self._handle_profile_update(path)
+            return
         self._error(404, 'Unknown endpoint')
+
+    def _handle_profile_update(self, path: str) -> None:
+        parts = path.split('/')
+        user_id = parts[3]
+        try:
+            content_length = int(self.headers.get('Content-Length', '0') or '0')
+            raw = self.rfile.read(content_length) if content_length > 0 else b'{}'
+            payload = json.loads(raw.decode('utf-8') or '{}')
+            profile = self._extract_profile_fields(payload)
+            stored = update_user_profile(self._config(), user_id, profile)
+            self._cache_invalidate_prefixes([f'json:/api/users/{user_id}/profile'])
+            self._json(200, stored)
+        except Exception as exc:
+            LOGGER.exception('profile_update_failed user_id=%s error=%s', user_id, exc)
+            self._error(400, str(exc))
 
     def _handle_upload(self) -> None:
         content_type = self.headers.get('Content-Type', '')
@@ -271,7 +309,8 @@ class CoachingServiceHandler(BaseHTTPRequestHandler):
             user_id = form.getvalue('user_id') or 'demo_user'
             reference_session = form.getvalue('reference_session') or 'fast_laps'
             analysis_mode = form.getvalue('analysis_mode') or 'pace'
-            LOGGER.info('upload_form_parsed user_id=%s reference_session=%s analysis_mode=%s', user_id, reference_session, analysis_mode)
+            profile = self._extract_profile_fields(form)
+            LOGGER.info('upload_form_parsed user_id=%s reference_session=%s analysis_mode=%s profile_fields=%s', user_id, reference_session, analysis_mode, sorted(profile.keys()))
 
             stage = 'extract_file_field'
             if 'file' not in form:
@@ -293,13 +332,14 @@ class CoachingServiceHandler(BaseHTTPRequestHandler):
             LOGGER.info('upload_validated source_path=%s reference_session=%s analysis_mode=%s', validation.get('source_path'), reference_session, analysis_mode)
 
             stage = 'create_session'
-            session = create_user_session(self._config(), user_id, Path(file_item.filename).stem, temp_path, reference_session, analysis_mode)
+            session = create_user_session(self._config(), user_id, Path(file_item.filename).stem, temp_path, reference_session, analysis_mode, user_profile=profile)
             LOGGER.info('upload_session_created session_id=%s uploaded_path=%s', session.get('session_id'), session.get('uploaded_path'))
 
             stage = 'create_job'
             job = create_job(self._config(), user_id, session['session_id'], reference_session, analysis_mode)
             LOGGER.info('upload_job_created job_id=%s session_id=%s', job.get('job_id'), session.get('session_id'))
             self._cache_invalidate_prefixes([
+                f'json:/api/users/{user_id}/profile',
                 f'json:/api/users/{user_id}/sessions',
                 f'json:/api/users/{user_id}/sessions/{session["session_id"]}',
                 f'json:/api/jobs/{job["job_id"]}',

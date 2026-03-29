@@ -8,6 +8,9 @@ from pathlib import Path
 from typing import Any
 
 
+PROFILE_FIELDS = ('driver_name', 'driver_type', 'experience_level', 'primary_goal')
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -19,6 +22,54 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def _read_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text())
+
+
+def _normalize_profile(profile: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not profile:
+        return None
+    normalized: dict[str, Any] = {}
+    for key in PROFILE_FIELDS:
+        value = profile.get(key)
+        if value is None:
+            continue
+        value = str(value).strip()
+        if value:
+            normalized[key] = value
+    return normalized or None
+
+
+def get_user_profile(config: dict[str, Any], user_id: str) -> dict[str, Any]:
+    user_dir = ensure_user(config, user_id)
+    meta = _read_json(user_dir / 'user.json')
+    return {
+        'user_id': user_id,
+        'profile': meta.get('profile'),
+        'created_at': meta.get('created_at'),
+        'updated_at': meta.get('updated_at'),
+    }
+
+
+def update_user_profile(config: dict[str, Any], user_id: str, profile: dict[str, Any] | None) -> dict[str, Any]:
+    user_dir = ensure_user(config, user_id)
+    path = user_dir / 'user.json'
+    meta = _read_json(path)
+    meta['profile'] = _normalize_profile(profile)
+    meta['updated_at'] = utc_now_iso()
+    _write_json(path, meta)
+    return {
+        'user_id': user_id,
+        'profile': meta.get('profile'),
+        'created_at': meta.get('created_at'),
+        'updated_at': meta.get('updated_at'),
+    }
+
+
+def resolve_user_profile(config: dict[str, Any], user_id: str, profile_override: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    normalized_override = _normalize_profile(profile_override)
+    if normalized_override is not None:
+        update_user_profile(config, user_id, normalized_override)
+        return normalized_override
+    return get_user_profile(config, user_id).get('profile')
 
 
 def get_runtime_root(config: dict[str, Any]) -> Path:
@@ -45,11 +96,11 @@ def ensure_user(config: dict[str, Any], user_id: str) -> Path:
     (user_dir / 'uploads').mkdir(parents=True, exist_ok=True)
     meta = user_dir / 'user.json'
     if not meta.exists():
-        _write_json(meta, {'user_id': user_id, 'created_at': utc_now_iso()})
+        _write_json(meta, {'user_id': user_id, 'created_at': utc_now_iso(), 'updated_at': utc_now_iso(), 'profile': None})
     return user_dir
 
 
-def create_user_session(config: dict[str, Any], user_id: str, original_name: str, source_path: str | Path, reference_session: str, analysis_mode: str) -> dict[str, Any]:
+def create_user_session(config: dict[str, Any], user_id: str, original_name: str, source_path: str | Path, reference_session: str, analysis_mode: str, user_profile: dict[str, Any] | None = None) -> dict[str, Any]:
     user_dir = ensure_user(config, user_id)
     session_id = uuid.uuid4().hex[:12]
     upload_dir = user_dir / 'uploads' / session_id
@@ -59,6 +110,7 @@ def create_user_session(config: dict[str, Any], user_id: str, original_name: str
     shutil.copy2(src, stored_path)
     session_dir = user_dir / 'sessions' / session_id
     session_dir.mkdir(parents=True, exist_ok=True)
+    profile_snapshot = resolve_user_profile(config, user_id, user_profile)
     meta = {
         'session_id': session_id,
         'user_id': user_id,
@@ -70,6 +122,7 @@ def create_user_session(config: dict[str, Any], user_id: str, original_name: str
         'created_at': utc_now_iso(),
         'status': 'uploaded',
         'result_dir': str(session_dir / 'result'),
+        'user_profile': profile_snapshot,
     }
     _write_json(session_dir / 'session.json', meta)
     return meta
