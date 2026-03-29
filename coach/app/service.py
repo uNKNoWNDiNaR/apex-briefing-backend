@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import cgi
 import json
+import logging
+import shutil
 import threading
+import traceback
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -12,6 +16,9 @@ from ..config import load_config
 from .job_runner import process_job
 from .session_store import create_job, create_user_session, get_job, get_result_metadata, get_session_metadata, list_user_sessions
 from .uploads import UploadValidationError, validate_upload
+
+
+LOGGER = logging.getLogger('rpe_coach.service')
 
 
 class CoachingServiceHandler(BaseHTTPRequestHandler):
@@ -48,8 +55,10 @@ class CoachingServiceHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _error(self, status: int, message: str) -> None:
-        self._json(status, {'status': 'error', 'message': message})
+    def _error(self, status: int, message: str, **extra: Any) -> None:
+        payload = {'status': 'error', 'message': message}
+        payload.update(extra)
+        self._json(status, payload)
 
     def do_OPTIONS(self) -> None:
         self.send_response(204)
@@ -131,37 +140,76 @@ class CoachingServiceHandler(BaseHTTPRequestHandler):
         self._error(404, 'Unknown endpoint')
 
     def _handle_upload(self) -> None:
-        ctype, pdict = cgi.parse_header(self.headers.get('Content-Type', ''))
-        if ctype != 'multipart/form-data':
-            self._error(400, 'Expected multipart/form-data upload')
-            return
-        pdict['boundary'] = bytes(pdict['boundary'], 'utf-8')
-        form = cgi.FieldStorage(fp=self.rfile, headers=self.headers, environ={'REQUEST_METHOD': 'POST', 'CONTENT_TYPE': self.headers.get('Content-Type')})
+        content_type = self.headers.get('Content-Type', '')
+        content_length = self.headers.get('Content-Length', '')
+        LOGGER.info('upload_request_started content_type=%s content_length=%s remote=%s', content_type, content_length, self.client_address[0] if self.client_address else 'unknown')
+        stage = 'parse_content_type'
         try:
+            ctype, pdict = cgi.parse_header(content_type)
+            if ctype != 'multipart/form-data':
+                self._error(400, 'Expected multipart/form-data upload', stage=stage)
+                return
+            boundary = pdict.get('boundary')
+            if not boundary:
+                self._error(400, 'Missing multipart boundary', stage=stage)
+                return
+            stage = 'parse_form'
+            form = cgi.FieldStorage(
+                fp=self.rfile,
+                headers=self.headers,
+                environ={
+                    'REQUEST_METHOD': 'POST',
+                    'CONTENT_TYPE': content_type,
+                    'CONTENT_LENGTH': content_length,
+                },
+            )
             user_id = form.getvalue('user_id') or 'demo_user'
             reference_session = form.getvalue('reference_session') or 'fast_laps'
             analysis_mode = form.getvalue('analysis_mode') or 'pace'
-            file_item = form['file']
-            if not getattr(file_item, 'filename', None):
+            LOGGER.info('upload_form_parsed user_id=%s reference_session=%s analysis_mode=%s', user_id, reference_session, analysis_mode)
+
+            stage = 'extract_file_field'
+            if 'file' not in form:
                 raise UploadValidationError('Missing upload file field')
+            file_item = form['file']
+            if isinstance(file_item, list) or not getattr(file_item, 'filename', None):
+                raise UploadValidationError('Missing upload file field')
+
+            stage = 'save_upload'
             tmp_root = Path(self._config()['paths']['runtime_root']) / 'incoming'
             tmp_root.mkdir(parents=True, exist_ok=True)
-            temp_path = tmp_root / Path(file_item.filename).name
+            temp_path = tmp_root / f"{uuid.uuid4().hex[:12]}_{Path(file_item.filename).name}"
             with temp_path.open('wb') as fh:
-                fh.write(file_item.file.read())
+                shutil.copyfileobj(file_item.file, fh, length=8 * 1024 * 1024)
+            LOGGER.info('upload_saved temp_path=%s file_name=%s size_bytes=%s', temp_path, Path(file_item.filename).name, temp_path.stat().st_size if temp_path.exists() else 'missing')
+
+            stage = 'validate_upload'
             validation = validate_upload(temp_path, reference_session, analysis_mode, self._config())
+            LOGGER.info('upload_validated source_path=%s reference_session=%s analysis_mode=%s', validation.get('source_path'), reference_session, analysis_mode)
+
+            stage = 'create_session'
             session = create_user_session(self._config(), user_id, Path(file_item.filename).stem, temp_path, reference_session, analysis_mode)
+            LOGGER.info('upload_session_created session_id=%s uploaded_path=%s', session.get('session_id'), session.get('uploaded_path'))
+
+            stage = 'create_job'
             job = create_job(self._config(), user_id, session['session_id'], reference_session, analysis_mode)
+            LOGGER.info('upload_job_created job_id=%s session_id=%s', job.get('job_id'), session.get('session_id'))
+
+            stage = 'start_processing'
             thread = threading.Thread(target=process_job, args=(job['job_id'], getattr(self.server, 'config_path', None)), daemon=True)
             thread.start()
+            LOGGER.info('upload_processing_started job_id=%s', job.get('job_id'))
             self._json(202, {'status': 'accepted', 'validation': validation, 'session': session, 'job': job})
         except UploadValidationError as exc:
-            self._error(400, str(exc))
+            LOGGER.warning('upload_validation_failed stage=%s error=%s', stage, exc)
+            self._error(400, str(exc), stage=stage)
         except Exception as exc:
-            self._error(500, str(exc))
+            LOGGER.exception('upload_failed stage=%s error=%s', stage, exc)
+            self._error(500, str(exc), stage=stage, error_type=type(exc).__name__)
 
 
 def serve(config_path: str | None = None, host: str = '127.0.0.1', port: int = 8080) -> None:
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
     config = load_config(config_path)
     server = ThreadingHTTPServer((host, port), CoachingServiceHandler)
     server.config = config  # type: ignore[attr-defined]
