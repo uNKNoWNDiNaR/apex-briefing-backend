@@ -50,7 +50,7 @@ The repository includes `render.yaml` with:
    - `COACH_DATASET_ROOT=/data/hackathon_data`
    - `COACH_OUTPUT_ROOT=/data/outputs`
    - `COACH_RUNTIME_ROOT=/data/runtime`
-   - `COACH_CORS_ALLOWED_ORIGINS=https://your-lovable-app.example.com`
+   - `COACH_CORS_ALLOWED_ORIGINS=https://race-vision.lovable.app`
 6. Deploy the service.
 7. Verify `GET /health` returns `{"status": "ok"}`.
 8. Run one real upload through `/api/uploads` before wiring the app.
