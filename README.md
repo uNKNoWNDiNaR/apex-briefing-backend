@@ -38,17 +38,17 @@ cd /Volumes/SanDisk/RPE/backend
 - `runtime/`: mutable uploads, jobs, user sessions, and result manifests.
 
 ## Deployment
-See `docs/DEPLOYMENT_RAILWAY.md`.
+See `docs/DEPLOYMENT_RENDER.md`.
 
 ## Architecture
 See `docs/ARCHITECTURE.md`.
 
-## Railway deploy
-Set these environment variables in Railway:
+## Render deploy
+Set these environment variables in Render:
 - `COACH_DATASET_ROOT`
 - `COACH_OUTPUT_ROOT`
 - `COACH_RUNTIME_ROOT`
 - `COACH_CORS_ALLOWED_ORIGINS`
 
 Use `.env.example` as the source of truth for variable names.
-Railway can use either `Procfile` or `railway.toml`.
+Use `render.yaml` as the primary deployment config.

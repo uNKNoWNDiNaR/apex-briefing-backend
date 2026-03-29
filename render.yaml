@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: rpe-coach-backend
+    env: python
+    plan: starter
+    buildCommand: pip install -e .
+    startCommand: python -m coach.cli serve --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    disk:
+      name: coach-data
+      mountPath: /data
+      sizeGB: 50
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.10
+      - key: COACH_DATASET_ROOT
+        value: /data/hackathon_data
+      - key: COACH_OUTPUT_ROOT
+        value: /data/outputs
+      - key: COACH_RUNTIME_ROOT
+        value: /data/runtime
+      - key: COACH_CORS_ALLOWED_ORIGINS
+        sync: false
