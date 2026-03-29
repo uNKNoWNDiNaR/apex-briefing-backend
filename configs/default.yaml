@@ -140,3 +140,5 @@ service:
   cors_allowed_origins:
     - http://127.0.0.1:8080
     - http://localhost:8080
+  read_cache_ttl_s: 2.0
+  read_cache_max_file_bytes: 2000000

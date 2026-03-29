@@ -6,6 +6,8 @@
 - `COACH_RUNTIME_ROOT`: writable directory for uploads, jobs, and user session state.
 - `COACH_CORS_ALLOWED_ORIGINS`: comma-separated list of allowed frontend origins.
 - `PORT`: provided by Render.
+- `COACH_READ_CACHE_TTL_S`: optional short TTL for session/result metadata caching.
+- `COACH_READ_CACHE_MAX_FILE_BYTES`: optional max JSON file size to keep in the in-memory read cache.
 
 ## Recommended persistent disk layout
 Mount a Render disk at `/data` and create:
@@ -50,7 +52,7 @@ The repository includes `render.yaml` with:
    - `COACH_DATASET_ROOT=/data/hackathon_data`
    - `COACH_OUTPUT_ROOT=/data/outputs`
    - `COACH_RUNTIME_ROOT=/data/runtime`
-   - `COACH_CORS_ALLOWED_ORIGINS=https://race-vision.lovable.app,https://preview--race-vision.lovable.app`
+   - `COACH_CORS_ALLOWED_ORIGINS=https://race-vision.lovable.app,https://*.lovableproject.com`
 6. Deploy the service.
 7. Verify `GET /health` returns `{"status": "ok"}`.
 8. Run one real upload through `/api/uploads` before wiring the app.

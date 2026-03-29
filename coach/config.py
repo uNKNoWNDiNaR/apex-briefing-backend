@@ -39,6 +39,8 @@ def _apply_env_overrides(config: dict[str, Any]) -> None:
         ('mapping', 'handoff_root'): os.getenv('COACH_HANDOFF_ROOT'),
         ('mapping', 'app_public_root'): os.getenv('COACH_APP_PUBLIC_ROOT'),
         ('service', 'cors_allowed_origins'): os.getenv('COACH_CORS_ALLOWED_ORIGINS'),
+        ('service', 'read_cache_ttl_s'): os.getenv('COACH_READ_CACHE_TTL_S'),
+        ('service', 'read_cache_max_file_bytes'): os.getenv('COACH_READ_CACHE_MAX_FILE_BYTES'),
         ('ai_debrief', 'allow_remote_generation'): os.getenv('COACH_AI_DEBRIEF_ENABLED'),
         ('ai_debrief', 'model'): os.getenv('COACH_AI_MODEL'),
         ('ai_debrief', 'temperature'): os.getenv('COACH_AI_TEMPERATURE'),
@@ -55,6 +57,16 @@ def _apply_env_overrides(config: dict[str, Any]) -> None:
             elif key == 'temperature':
                 try:
                     config.setdefault(section, {})[key] = float(value)
+                except Exception:
+                    config.setdefault(section, {})[key] = value
+            elif key in {'read_cache_ttl_s'}:
+                try:
+                    config.setdefault(section, {})[key] = float(value)
+                except Exception:
+                    config.setdefault(section, {})[key] = value
+            elif key in {'read_cache_max_file_bytes'}:
+                try:
+                    config.setdefault(section, {})[key] = int(value)
                 except Exception:
                     config.setdefault(section, {})[key] = value
             else:

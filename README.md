@@ -49,10 +49,14 @@ Set these environment variables in Render:
 - `COACH_OUTPUT_ROOT`
 - `COACH_RUNTIME_ROOT`
 - `COACH_CORS_ALLOWED_ORIGINS`
-  - include both `https://race-vision.lovable.app` and `https://preview--race-vision.lovable.app` if you use Lovable preview builds
+  - include `https://race-vision.lovable.app` and `https://*.lovableproject.com` if you use Lovable preview builds
 
 Use `.env.example` as the source of truth for variable names.
 Use `render.yaml` as the primary deployment config.
+
+Optional read-cache tuning:
+- `COACH_READ_CACHE_TTL_S`
+- `COACH_READ_CACHE_MAX_FILE_BYTES`
 
 For grounded AI generation also set:
 - `OPENAI_API_KEY`
