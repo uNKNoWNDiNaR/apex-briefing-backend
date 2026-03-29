@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rpe-coach"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = ["numpy", "pandas", "pyarrow", "PyYAML", "rosbags"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["coach*"]
+
+[project.scripts]
+coach = "coach.cli:main"
+

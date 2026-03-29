@@ -1,0 +1,134 @@
+paths:
+  dataset_root: /Volumes/SanDisk/RPE/hackathon_data
+  output_root: /Volumes/SanDisk/RPE/backend/outputs
+  runtime_root: /Volumes/SanDisk/RPE/backend/runtime
+
+sessions:
+  good_lap: hackathon_good_lap.mcap
+  fast_laps: hackathon_fast_laps.mcap
+  wheel_to_wheel: hackathon_wheel_to_wheel.mcap
+
+ingest:
+  base_topic: /constructor0/state_estimation
+  merge_tolerance_ms: 50
+  camera_topics:
+    - /constructor0/sensor/camera_fl/compressed_image
+    - /constructor0/sensor/camera_r/compressed_image
+  extra_topics:
+    - /constructor0/can/wheels_speed_01
+    - /constructor0/can/psa_status_01
+    - /constructor0/can/cba_status_fl
+    - /constructor0/can/cba_status_fr
+    - /constructor0/can/cba_status_rl
+    - /constructor0/can/cba_status_rr
+    - /constructor0/can/ice_status_02
+    - /constructor0/can/kistler_acc_body
+    - /constructor0/can/kistler_ang_vel_body
+    - /constructor0/can/kistler_correvit
+    - /constructor0/can/mm710_tx1_z_ay
+    - /constructor0/can/mm710_tx2_x_ax
+    - /constructor0/can/mm710_tx3_y_az
+    - /constructor0/can/badenia_560_tpms_front
+    - /constructor0/can/badenia_560_tpms_rear
+    - /constructor0/can/badenia_560_tyre_surface_temp_front
+    - /constructor0/can/badenia_560_tyre_surface_temp_rear
+    - /constructor0/can/badenia_560_brake_disk_temp
+    - /constructor0/can/badenia_560_wheel_load
+    - /constructor0/can/badenia_560_ride_front
+    - /constructor0/can/badenia_560_ride_rear
+    - /constructor0/can/badenia_560_powertrain_press
+    - /constructor0/can/badenia_560_powertrain_temp
+
+track:
+  boundary_json: yas_marina_bnd.json
+  centerline_points: 2895
+  min_complete_lap_coverage: 0.85
+
+segmentation:
+  curvature_quantile: 0.84
+  curvature_threshold_min: 0.0035
+  curvature_smoothing_window_points: 41
+  min_corner_length_m: 28.0
+  min_straight_length_m: 45.0
+  min_corner_peak_curvature: 0.0050
+  merge_gap_points: 16
+  merge_gap_length_m: 55.0
+  merge_curvature_factor: 0.45
+  split_complex_min_length_m: 170.0
+  split_peak_quantile: 0.72
+  split_min_peak_separation_points: 34
+  split_valley_ratio: 0.82
+  split_min_subcorner_length_m: 38.0
+  brake_approach_cap_m: 140.0
+  brake_threshold: 200.0
+  throttle_pickup_threshold: 0.2
+  apex_window_min_m: 12.0
+  apex_window_max_m: 36.0
+
+features:
+  contiguous_gap_s: 0.25
+
+comparison:
+  progress_step_m: 2.0
+  min_time_loss_card_s: 0.05
+  brake_point_delta_threshold_m: 10.0
+  brake_release_delta_threshold_m: 8.0
+  apex_speed_delta_threshold_mps: 2.0
+  exit_speed_delta_threshold_mps: 2.5
+  straight_exit_delta_threshold_mps: 1.5
+  throttle_pickup_delta_threshold_m: 8.0
+  steering_smoothness_ratio_threshold: 1.2
+  expected_gain_scale: 0.65
+  max_cards_per_segment: 2
+
+replay:
+  braking_trigger_distance_m: 90.0
+  entry_trigger_distance_m: 55.0
+  apex_trigger_distance_m: 35.0
+  exit_trigger_distance_m: 28.0
+  min_trigger_lead_s: 1.2
+  max_trigger_lead_s: 6.0
+
+racecraft:
+  long_straight_threshold_m: 180.0
+  defensive_brake_delta_m: -12.0
+  late_attack_brake_delta_m: 8.0
+  compromised_exit_delta_mps: -2.5
+  follow_hesitation_delta_m: 10.0
+  line_offset_delta_m: 0.75
+  max_cards: 10
+
+export:
+  top_cards: 8
+
+
+mapping:
+  handoff_root: /Volumes/SanDisk/RPE/lovable_handoff
+  app_public_root: /Volumes/SanDisk/RPE/apex-briefing/public/data
+
+
+stats:
+  confidence_high_score: 0.72
+  confidence_medium_score: 0.48
+  expected_gain_min_s: 0.03
+  expected_gain_cap_ratio: 0.35
+  expected_gain_abs_cap_s: 2.5
+  duplicate_title_soft_cap: 2
+
+ai_debrief:
+  allow_remote_generation: false
+  model: gpt-4.1-mini
+  temperature: 0.1
+  max_cards_in_prompt: 6
+
+user_flow:
+  supported_upload_formats:
+    - .mcap
+  default_reference_session: fast_laps
+  default_analysis_mode: pace
+  history_limit: 50
+
+service:
+  cors_allowed_origins:
+    - http://127.0.0.1:8080
+    - http://localhost:8080
