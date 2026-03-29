@@ -117,13 +117,13 @@ stats:
 
 ai_debrief:
   allow_remote_generation: true
-  model: gpt-4.1-mini
+  model: gpt-5
   temperature: 0.1
   max_cards_in_prompt: 6
 
 ai_selected_detail:
   allow_remote_generation: true
-  model: gpt-4.1-mini
+  model: gpt-5
   temperature: 0.1
   max_cards_in_prompt: 8
   max_corners_in_prompt: 8

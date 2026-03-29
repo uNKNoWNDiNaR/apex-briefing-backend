@@ -457,7 +457,7 @@ def _try_remote_generation(payload: dict[str, Any], config: dict[str, Any]) -> d
         system=system,
         user=user,
         settings=settings,
-        default_model='gpt-4.1-mini',
+        default_model='gpt-5',
         response_schema_hint={
             'short_summary': 'string',
             'top_strengths': 'array',
